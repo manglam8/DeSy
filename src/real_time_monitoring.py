@@ -1,26 +1,45 @@
-import joblib
 import scapy.all as scapy
-import pandas as pd
-from utils import extract_features_from_packet
-'''
-# Load the pre-trained model
-model = joblib.load('models/ml_model.pkl')
+import time
+from collections import defaultdict
 
-def classify_packet(packet):
-    features = extract_features_from_packet(packet)  # Custom function to extract relevant features from the packet
-    features = pd.DataFrame([features])  # Convert to DataFrame for prediction
-    result = model.predict(features)
-    return "Attack Detected" if result == 1 else "Normal Traffic"
-'''
-def packet_sniffer(packet):
-    #classification = classify_packet(packet)
-    #print(f"Packet: {packet.summary()}, Classification: {classification}")
+# Store extracted features for connections
+connections = defaultdict(lambda: {
+    'protocol_type': None,
+    'src_bytes': 0,
+    'dst_bytes': 0,
+    'count': 0,
+    'serror_rate': 0,   # Add more features here
+    'rerror_rate': 0,
+    'start_time': None
+})
+
+# Function to extract features from packet
+def extract_features(packet):
+    src_ip = packet[scapy.IP].src if scapy.IP in packet else None
+    dst_ip = packet[scapy.IP].dst if scapy.IP in packet else None
+    protocol = packet[scapy.IP].proto if scapy.IP in packet else None
     
-    # Log detected attacks
-    #if classification == "Attack Detected":
-    with open('logs/capture.pcap', 'a') as log_file:
-        log_file.write(f"{packet}\n")
+    if src_ip and dst_ip:
+        # Update connection features
+        connection = connections[(src_ip, dst_ip)]
+        connection['protocol_type'] = protocol
+        connection['src_bytes'] += len(packet)
+        connection['count'] += 1
+        if connection['start_time'] is None:
+            connection['start_time'] = time.time()
+        
+        # Compute additional features as required
+        # Example: `serror_rate`, `rerror_rate`, etc.
+        # These need to be computed over multiple packets
+    
+    return connection
 
+# Sniffer callback function
+def packet_sniffer(packet):
+    connection_features = extract_features(packet)
+    print(connection_features)
+
+# Start sniffing
 if __name__ == "__main__":
     print("Starting network traffic monitoring...")
-    scapy.sniff(prn=packet_sniffer, store=False)  # Start sniffing live traffic
+    scapy.sniff(prn=packet_sniffer, store=False)
